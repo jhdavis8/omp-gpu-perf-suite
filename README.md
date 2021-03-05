@@ -13,8 +13,10 @@ Apps included:
 
 ## Licensing/Availability
 
-Licensing information for each app is included in its subfolder under `/apps`. The laplace and GPP apps have not yet been added as some additional work is needed to ensure the codes can be provided with the appropriate licensing. The upstream version of the GPP app is available [here](https://gitlab.com/NERSC/nersc-proxies/BerkeleyGW-Kernels-CPP) from NERSC.
+Licensing information for each app is included in its subfolder under `/apps`. The laplace and GPP apps have not yet been added as some additional work is needed to ensure the codes can be provided with the appropriate licensing.
+
+The upstream version of the GPP app (without the modifications described in the paper) is available [here](https://gitlab.com/NERSC/nersc-proxies/BerkeleyGW-Kernels-CPP) from NERSC.
 
 ## Building and Running
 
-At the moment an integrated build system across all of the apps has not been created. To build and run any of the apps, see the Makefile and README information provided in its subfolder.
+At the moment an integrated build system across all of the apps has not been created. To build and run any of the apps, see the Makefile and README information provided in the relevant subfolder.
