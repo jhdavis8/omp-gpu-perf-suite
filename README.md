@@ -6,3 +6,5 @@ Apps to be included:
 * laplace
 * gpp (BerkeleyGW)
 * ToyPush (XGC)
+
+Licensing information for each app is included in its subfolder under `/apps`.
