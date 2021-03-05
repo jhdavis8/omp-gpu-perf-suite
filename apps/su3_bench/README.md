@@ -11,7 +11,9 @@ The code is the documentation. It's simple enough, so dive in.
 Various makefiles are also included, one for each of the respective compile environments I've tried so far.
 
 ### Usage
-*To test a particular compiler, run the appropriate script in the compiler-tests folder. For example, clang_test.sh will run the OpenMP benchmark in 32- and 64-bit precision, for all code versions. The results will be output to a data folder in the repository root. Each compiler's script loads all the appropriate modules, and they are designed to be run from within an interactive allocation on Cori.*
+*To test a particular compiler, run the appropriate script in the compiler-tests folder. For example, clang_test.sh will run the OpenMP benchmark in 32- and 64-bit precision, for all code versions. The results will be output to a data folder in the repository root. Each compiler's script loads all the appropriate modules, and they are designed to be run from within an interactive allocation on Cori-gpu.*
+
+*Note that the Cori modules specified may need to be updated to match the latest changes in modulefile setup on Cori-gpu.*
 
 *If you build a particular code verison, you can see the command line arguments using the following:*
 *bench_xxx.exe -h*
