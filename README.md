@@ -9,7 +9,7 @@ Apps included:
 * BabelStream
 * laplace **(Pending)**
 * GPP (BerkeleyGW) **(Pending)**
-* ToyPush (XGC)
+* ToyPush (XGC) **(Pending)**
 
 ## Licensing/Availability
 
