@@ -45,8 +45,10 @@ contains
 
     use grid_module, only : grid_mapping, grid_ntri
 
-    double precision, dimension(veclen,4) :: y
-    integer, dimension(veclen) :: id
+    implicit none
+
+    double precision, intent(in), dimension(veclen,4) :: y
+    integer, dimension(veclen), intent(inout) :: id
 
     integer :: itri, iv
     double precision, dimension(3) :: bc_coords !> Weight factor for each node
@@ -58,9 +60,11 @@ contains
     err = 0
     id = -999
 
-    !!$omp simd private(dx,bc_coords)
-    !$omp simd 
-    !dir$ vector aligned
+#ifdef _OPENMP
+    !$omp target teams distribute simd private(dx, bc_coords)
+#elif _OPENACC
+    !$acc parallel loop private(dx, bc_coords)
+#endif
     vecloop: do iv = 1,veclen
        triangleloop: do itri = 1,grid_ntri
           

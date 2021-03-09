@@ -5,21 +5,21 @@
 program toypush
 
   use params
-  use rk4, only: rk4_push
-  use particle, only: particle_data
+  use rk4, only: rk4_push, y, dy, ytmp, dyt, dym, y2, jacb, efield, bfield
+! use particle, only: particle_data
   use initmodule, only : init
+use grid_module, only : grid_efield, grid_mapping, grid_node, grid_tri
 
-#ifdef OPENMP
-  use omp_lib
-#endif
-#ifdef MPI
-  use mpi
-#endif
-  
   implicit none  
   
   integer :: err
-  type(particle_data) :: prt
+   double precision, allocatable, dimension(:)   :: prt_mass
+   double precision, allocatable, dimension(:)   :: prt_charge
+   double precision, allocatable, dimension(:,:) :: prt_rpz
+   double precision, allocatable, dimension(:)   :: prt_mu
+   double precision, allocatable, dimension(:)   :: prt_rho_par
+   logical                                       :: prt_isAllocated
+
   integer :: it,iblock
   integer :: nblock
   
@@ -32,22 +32,6 @@ program toypush
   my_id = 0
   num_procs = 1
 
-#ifdef OPENMP
-  !$omp parallel
-  !$omp master
-  if(my_id .eq. 0) then
-     write(*,*) 'number of OpenMP threads = ',omp_get_num_threads()
-  end if
-  !$omp end master
-  !$omp end parallel
-#endif
-
-#ifdef MPI
-  call mpi_init(err)
-  call MPI_COMM_RANK (MPI_COMM_WORLD, my_id, err)
-  call MPI_COMM_SIZE (MPI_COMM_WORLD, num_procs, err)
-#endif
-
   params_nprt = params_nprtPerRank * num_procs
 
   if(my_id .eq. 0) write(*,*) 'program toypush started'
@@ -58,55 +42,39 @@ program toypush
   if(my_id .eq. 0) write(*,*) 'initializing particles with ',params_nprt,'total particles.'
   if(my_id .eq. 0) write(*,*) 'initializing grid      with ',params_nnode,'nodes.'
   if(my_id .eq. 0) write(*,*) 'initializing grid      with ',params_ntri,'triangles.'
-  err = init(prt)
+  err = init(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated)
   if(err .ne. 0) stop
   if(my_id .eq. 0) write(*,*) 'done initialising'
   if(my_id .eq. 0) write(*,*)
   
   nblock = params_nprt / veclen  
   if(my_id .eq. 0) write(*,*) 'pushing particles in ',nblock,' blocks'
+
+  call cpu_time(t1)
   
   !pid = 88
   !open(unit=15,file='orbit.dat',action='write')
-
-#ifdef OPENMP
-  t1 = omp_get_wtime()
-#else
-  t1 = mpi_wtime()
+#ifdef _OPENMP
+  !$omp target update to(prt_rpz, prt_rho_par, y, bfield, efield, prt_charge, prt_mass, prt_mu, jacb, ytmp, dy, dyt, dym, y2, grid_mapping, grid_efield, grid_tri)
+#elif _OPENACC
+  !$acc update device(prt_rpz, prt_rho_par, y, bfield, efield, prt_charge, prt_mass, prt_mu, jacb, ytmp, dy, dyt, dym, y2, grid_mapping, grid_efield, grid_tri)
 #endif
+  do iblock = 1, nblock
 
-  !$omp parallel do private(iblock, it)
-  do iblock = 1,nblock
-
-#ifdef MPI
-     if (mod(iblock,num_procs) .eq. my_id) then
-#endif
-     
-        do it = 1,nt
-           err = rk4_push(prt, iblock)
+        write(*,*) "iblock=", iblock, " of nblock=", nblock
+        do it = 1, nt
+           err = rk4_push(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated, iblock)
            
-#ifdef VERBOSE
-#ifdef OPENMP
-           !$omp critical
-           if (mod(it,nt) .eq. 0) then
-              ith = omp_get_thread_num()
-              if(my_id .eq. 0) write(*,*) 'Thread ',ith,' completed block ',iblock
-           end if
-           !$omp end critical
-#endif
-#endif
         end do
-#ifdef MPI
-     end if
-#endif
   end do
   !close(15)
-
-#ifdef OPENMP
-  t2 = omp_get_wtime()
-#else
-  t2 = mpi_wtime()
+#ifdef _OPENMP
+  !$omp target update from(prt_rpz, prt_rho_par, y2, y, bfield, efield, prt_charge, prt_mass, prt_mu, jacb, dy, dyt, dym, ytmp, grid_mapping, grid_efield, grid_tri)
+#elif _OPENACC
+  !$acc update host(prt_rpz, prt_rho_par, y2, y, bfield, efield, prt_charge, prt_mass, prt_mu, jacb, dy, dyt, dym, ytmp, grid_mapping, grid_efield, grid_tri)
 #endif
+
+  call cpu_time(t2)
 
   if(my_id .eq. 0) write(*,*) 'done pushing'
   if(my_id .eq. 0) write(*,*) 'spent ',t2-t1,'s'
@@ -115,10 +83,7 @@ program toypush
   !call mpi_gatherv
   
   if(my_id .eq. 0)  write(*,*) 'finalizing'
-  err = finalize(prt)
-#ifdef MPI
-  call mpi_finalize(err)
-#endif
+  err = finalize(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated)
   if(my_id .eq. 0) write(*,*) 'done finalizing'
   if(my_id .eq. 0) write(*,*)
   
@@ -126,26 +91,42 @@ program toypush
   
 contains
   
-  function finalize(prt) result(err)
+  function finalize(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated) result(err)
 
     use rk4, only: rk4_deallocate
-    use particle, only : particle_data, particle_deallocate
+    use particle, only : particle_deallocate
 #ifdef USEIO
     use particleio, only : particleio_write
 #endif
     
     implicit none
 
-    type(particle_data) :: prt
+   double precision, allocatable, dimension(:)   :: prt_mass
+   double precision, allocatable, dimension(:)   :: prt_charge
+   double precision, allocatable, dimension(:,:) :: prt_rpz
+   double precision, allocatable, dimension(:)   :: prt_mu
+   double precision, allocatable, dimension(:)   :: prt_rho_par
+   logical                                       :: prt_isAllocated
+
     integer :: err
 
 #ifdef USEIO
-    err = particleio_write(prt, 'endstate.dat')
+    err = particleio_write(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated, 'endstate.dat')
 #endif
     
-    err = particle_deallocate(prt)
+    err = particle_deallocate(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated)
     err = rk4_deallocate()
     
+    deallocate(grid_efield)
+    deallocate(grid_mapping)
+    deallocate(grid_node)
+    deallocate(grid_tri)
+#ifdef _OPENMP
+    !$omp target exit data map(release: grid_efield, grid_mapping, grid_tri)
+#elif _OPENACC
+    !$acc exit data delete(grid_efield, grid_mapping, grid_tri)
+#endif
+
   end function finalize
   
 end program toypush

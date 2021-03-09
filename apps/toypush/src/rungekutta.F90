@@ -16,31 +16,49 @@ module rk4
   
 contains
   
-  function rk4_push(prt, iblock) result(err)
+  function rk4_push(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated, iblock) result(err)
 
     use eom, only : eom_eval
     use interpolate, only : b_interpol_analytic, e_interpol_tri
-    use particle, only : particle_data, particle_getphase, particle_updatephase
+    use particle, only : particle_getphase, particle_updatephase
     use search_module, only : search_tr_vec
-    use grid_module, only : grid_ntri
+    use grid_module, only : grid_ntri, grid_mapping, grid_efield, grid_tri
     
     implicit none
 
-    type(particle_data), intent(inout) :: prt
+    double precision, allocatable, dimension(:)   :: prt_mass
+    double precision, allocatable, dimension(:)   :: prt_charge
+    double precision, allocatable, dimension(:,:) :: prt_rpz
+    double precision, allocatable, dimension(:)   :: prt_mu
+    double precision, allocatable, dimension(:)   :: prt_rho_par
+    logical                                       :: prt_isAllocated
+
     integer, intent(in) :: iblock
     
-    double precision :: hdt
+    double precision :: hdt, dt6
     integer :: err
 
     integer :: iv,iy
     integer, dimension(veclen) :: itri
 
-    hdt = dt * 0.5D0
+#ifdef _OPENMP
+    !$omp target data map(alloc: itri)
+#elif _OPENACC
+    !$acc data create(itri)
+#endif
 
-    err = particle_getPhase(prt,y,veclen,iblock)
+    hdt = dt * 0.5D0
+    dt6 = dt / 6.0D0
+
+    err = particle_getPhase(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated,y,veclen,iblock)
 
 #ifndef MULTIPLEELEMENTS
     itri = 1
+#ifdef _OPENMP
+    !$omp target update to(itri)
+#elif _OPENACC
+    !$acc update device(itri)
+#endif
 #endif
 
 #ifdef DEBUG
@@ -52,16 +70,24 @@ contains
 #ifdef MULTIPLEELEMENTS
     err = search_tr_vec(y,itri)
 #endif
-    if(any(itri .lt. 1) .or. any(itri.gt.grid_ntri)) stop
-    err = e_interpol_tri(y,itri,efield)
-    err = b_interpol_analytic(y,bfield,jacb)
-    err = eom_eval(y   ,bfield,jacb,efield,dt,dy ,prt%mu,prt%charge,prt%mass)
 
+    err = e_interpol_tri(y,itri,efield)
+
+    err = b_interpol_analytic(y,bfield,jacb)
+
+    err = eom_eval(y   ,bfield,jacb,efield,dt,dy ,prt_mu,prt_charge,prt_mass)
+
+#ifdef _OPENMP
+    !$omp target teams distribute collapse(2)
+#elif _OPENACC
+    !$acc parallel loop collapse(2)
+#endif
     do iy = 1,4
        do iv = 1,veclen
           ytmp(iv,iy) = y(iv,iy) + hdt * dy(iv,iy)
        end do
     end do
+
 #ifdef DEBUG
     err = check_bounds(ytmp)
     if(err .eq. 1) stop
@@ -69,15 +95,24 @@ contains
 #ifdef MULTIPLEELEMENTS
     err = search_tr_vec(ytmp,itri)
 #endif
-    err = e_interpol_tri(ytmp,itri,efield)
-    err = b_interpol_analytic(ytmp,bfield,jacb)
-    err = eom_eval(ytmp,bfield,jacb,efield,dt,dyt,prt%mu,prt%charge,prt%mass)
 
+    err = e_interpol_tri(ytmp,itri,efield)
+
+    err = b_interpol_analytic(ytmp,bfield,jacb)
+
+    err = eom_eval(ytmp,bfield,jacb,efield,dt,dyt,prt_mu,prt_charge,prt_mass)
+
+#ifdef _OPENMP
+    !$omp target teams distribute collapse(2)
+#elif _OPENACC
+    !$acc parallel loop collapse(2)
+#endif
     do iy = 1,4
        do iv = 1,veclen
           ytmp(iv,iy) = y(iv,iy) + hdt * dyt(iv,iy)
        end do
     end do
+
 #ifdef DEBUG
     err = check_bounds(ytmp)
     if(err .eq. 1) stop
@@ -88,16 +123,29 @@ contains
 #endif
     err = e_interpol_tri(ytmp,itri,efield)
     err = b_interpol_analytic(ytmp,bfield,jacb)
-    err = eom_eval(ytmp,bfield,jacb,efield,dt,dym,prt%mu,prt%charge,prt%mass)
+
+    err = eom_eval(ytmp,bfield,jacb,efield,dt,dym,prt_mu,prt_charge,prt_mass)
     
+#ifdef _OPENMP
+    !$omp target teams distribute collapse(2)
+#elif _OPENACC
+    !$acc parallel loop collapse(2)
+#endif
     do iy = 1,4
        do iv = 1,veclen
           ytmp(iv,iy) = y(iv,iy) + dt * dym(iv,iy)
        end do
     end do
+
 #ifdef DEBUG
     err = check_bounds(ytmp)
     if(err .eq. 1) stop
+#endif
+
+#ifdef _OPENMP
+    !$omp target teams distribute collapse(2)
+#elif _OPENACC
+    !$acc parallel loop collapse(2)
 #endif
     do iy = 1,4
        do iv = 1,veclen
@@ -109,13 +157,20 @@ contains
     err = search_tr_vec(ytmp,itri)
 #endif
     err = e_interpol_tri(ytmp,itri,efield)
+
     err = b_interpol_analytic(ytmp,bfield,jacb)
-    err = eom_eval(ytmp,bfield,jacb,efield,dt,dyt,prt%mu,prt%charge,prt%mass)
+
+    err = eom_eval(ytmp,bfield,jacb,efield,dt,dyt,prt_mu,prt_charge,prt_mass)
     
     ! Obtain new_phase
+#ifdef _OPENMP
+    !$omp target teams distribute collapse(2)
+#elif _OPENACC
+    !$acc parallel loop collapse(2)
+#endif
     do iy = 1,4
        do iv = 1,veclen
-          y2(iv,iy) = y(iv,iy) + dt / 6.0D0 * ( dy(iv,iy) + dyt(iv,iy) + 2.0D0*dym(iv,iy) )
+          y2(iv,iy) = y(iv,iy) + dt6 * ( dy(iv,iy) + dyt(iv,iy) + 2.0D0*dym(iv,iy) )
        end do
     end do
 #ifdef DEBUG
@@ -123,30 +178,46 @@ contains
     if(err .eq. 1) stop
 #endif
 
-    err = particle_updatePhase(prt,y2,veclen,iblock)
-    
+    err = particle_updatePhase(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated,y2,veclen,iblock)
+
+#ifdef _OPENMP
+    !$omp end target data
+#elif _OPENACC
+    !$acc end data
+#endif
+
   end function rk4_push
 
   function rk4_init() result(err)
 
+    implicit none
+
     integer :: err
     
-    allocate(ytmp(veclen,4))
-    allocate(y(   veclen,4))
-    allocate(y2(  veclen,4))
-    allocate(dy(  veclen,4))
-    allocate(dyt( veclen,4))
-    allocate(dym( veclen,4))
+    allocate(ytmp(veclen,4)) ! used by rk4_push, goes into eom_eval
+    allocate(y(   veclen,4)) ! used by rk4_push, goes into eom_eval
+    allocate(y2(  veclen,4)) ! used by rk4_push only
+    allocate(dy(  veclen,4)) ! used by eom_eval
+    allocate(dyt( veclen,4)) ! used by eom_eval
+    allocate(dym( veclen,4)) ! used by eom_eval
 
-    allocate(efield(veclen,3))
-    allocate(bfield(veclen,3))
-    allocate(jacb(veclen,3,3))
+    allocate(efield(veclen,3))   ! This is used by e_interpol_tri
+    allocate(bfield(veclen,3))   ! This is used by b_interpol_analytic
+    allocate(jacb(veclen,3,3))   ! This is used by b_interpol_analytic
+
+#ifdef _OPENMP
+    !$omp target enter data map(alloc: ytmp, y, y2, dy, dyt, dym, efield, bfield, jacb)
+#elif _OPENACC
+    !$acc enter data create(ytmp, y, y2, dy, dyt, dym, efield, bfield, jacb)
+#endif
 
     err = 0
     
   end function rk4_init
 
   function rk4_deallocate() result(err)
+
+    implicit none
 
     integer :: err
     
@@ -160,7 +231,13 @@ contains
     deallocate(efield)
     deallocate(bfield)
     deallocate(jacb)
-    
+
+#ifdef _OPENMP
+    !$omp target exit data map(release: ytmp, y, y2, dy, dyt, dym, efield, bfield, jacb)
+#elif _OPENACC
+    !$acc exit data delete(ytmp, y, y2, dy, dyt, dym, efield, bfield, jacb)
+#endif
+
     err = 0
 
   end function rk4_deallocate

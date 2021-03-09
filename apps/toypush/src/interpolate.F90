@@ -60,93 +60,42 @@ contains
     integer :: itri_scalar
 
     integer, dimension(veclen) :: istart, iend
-    integer :: num_vec_chunks,i_vec_chunks
+    integer :: num_vec_chunks,i_vec_chunks,ivs, ive
 
     err = 0
 
-    ! Loop through itri, find indices where the value of itri changes and store those in istart,iend.
-    ! Count the number of changes in num_vec_chunks.
-    num_vec_chunks = 1
-    istart(1) = 1
-    do iv = 1, veclen - 1
-       if(itri(iv) .ne. itri(iv+1)) then
-          iend(num_vec_chunks) = iv
-          istart(num_vec_chunks + 1) = iv + 1
-          num_vec_chunks = num_vec_chunks + 1
-       end if
-    end do
-    iend(num_vec_chunks) = veclen
+#ifdef _OPENMP
+    !$omp target teams distribute simd private(dx, bc_coords)
+#elif _OPENACC
+    !$acc parallel loop private(dx, bc_coords)
+#endif
+    do iv = 1, veclen
+       evec(iv,1) = 0D0
+       evec(iv,2) = 0D0
+       evec(iv,3) = 0D0
 
-    ! Loop through the vec_chunks, store a scalar value itri_scalar for each vec_chunk (since we know the value
-    ! does not change within a vec_chunk). Then loop through the elements in the vec_chunk (istart to iend) and 
-    ! do the interpolation using itri_scalar.
-    do i_vec_chunks = 1,num_vec_chunks
-       itri_scalar = itri(istart(i_vec_chunks))
+       itri_scalar = itri(iv)
 
-       !dir$ simd
-       !dir$ vector aligned
-       do iv = istart(i_vec_chunks),iend(i_vec_chunks)
-          evec(iv,:) = 0D0
-
-          dx(1) = y(iv,1) - grid_mapping(1,3,itri_scalar)
-          dx(2) = y(iv,3) - grid_mapping(2,3,itri_scalar)
-          bc_coords(1:2) = grid_mapping(1:2,1,itri_scalar) * dx(1) + grid_mapping(1:2,2,itri_scalar) * dx(2)
-          bc_coords(3) = 1.0D0 - bc_coords(1) - bc_coords(2)
+       dx(1) = y(iv,1) - grid_mapping(1,3,itri_scalar)
+       dx(2) = y(iv,3) - grid_mapping(2,3,itri_scalar)
+       bc_coords(1) = grid_mapping(1,1,itri_scalar) * dx(1) + grid_mapping(1,2,itri_scalar) * dx(2)
+       bc_coords(2) = grid_mapping(2,1,itri_scalar) * dx(1) + grid_mapping(2,2,itri_scalar) * dx(2)
+       bc_coords(3) = 1.0D0 - bc_coords(1) - bc_coords(2)
           
-          do inode = 1,3
-             do icomp = 1,3
-                evec(iv,icomp) = evec(iv,icomp) + grid_efield(icomp,grid_tri(inode,itri_scalar)) * bc_coords(inode)
-             end do
-          end do          
-
+#ifdef _OPENMP
+#elif _OPENACC
+       !$acc loop seq
+#endif
+       do inode = 1,3
+#ifdef _OPENMP
+#elif _OPENACC
+          !$acc loop seq
+#endif
+          do icomp = 1,3
+             evec(iv,icomp) = evec(iv,icomp) + grid_efield(icomp,grid_tri(inode,itri_scalar)) * bc_coords(inode)
+          end do
        end do
     end do
-
-    ! if(all(itri .eq. itri(1))) then
-    !    itri_scalar = itri(1)
-    !    !dir$ simd
-    !    !!dir$ nounroll
-    !    !dir$ vector aligned
-    !    do iv = 1,veclen
-          
-    !       evec(iv,:) = 0D0
-
-    !       dx(1) = y(iv,1) - grid_mapping(1,3,itri_scalar)
-    !       dx(2) = y(iv,3) - grid_mapping(2,3,itri_scalar)
-    !       bc_coords(1:2) = grid_mapping(1:2,1,itri_scalar) * dx(1) + grid_mapping(1:2,2,itri_scalar) * dx(2)
-    !       bc_coords(3) = 1.0D0 - bc_coords(1) - bc_coords(2)
-          
-    !       do inode = 1,3
-    !          do icomp = 1,3
-    !             evec(iv,icomp) = evec(iv,icomp) + grid_efield(icomp,grid_tri(inode,itri_scalar)) * bc_coords(inode)
-    !          end do
-    !       end do          
-          
-    !    end do
-    ! else
-    !    !num_gather = num_gather + 1
-    !    !dir$ simd
-    !    !!dir$ nounroll
-    !    !dir$ vector aligned
-    !    do iv = 1,veclen
-          
-    !       evec(iv,:) = 0D0
-
-    !       dx(1) = y(iv,1) - grid_mapping(1,3,itri(iv))
-    !       dx(2) = y(iv,3) - grid_mapping(2,3,itri(iv))
-    !       bc_coords(1:2) = grid_mapping(1:2,1,itri(iv)) * dx(1) + grid_mapping(1:2,2,itri(iv)) * dx(2)
-    !       bc_coords(3) = 1.0D0 - bc_coords(1) - bc_coords(2)
-          
-    !       nodes = grid_tri(:,itri(iv))
-          
-    !       do inode = 1,3
-    !          do icomp = 1,3
-    !             evec(iv,icomp) = evec(iv,icomp) + grid_efield(icomp,nodes(inode)) * bc_coords(inode)
-    !          end do
-    !       end do         
-          
-    !    end do
-    ! end if
     
   end function e_interpol_tri
 
@@ -199,6 +148,11 @@ contains
     double precision :: over_r, over_r2, r, z
     
     err = 0
+#ifdef _OPENMP
+    !$omp target teams distribute
+#elif _OPENACC
+    !$acc parallel loop
+#endif
     do iv = 1,veclen
        r = y(iv,1) - 2D0
        z = y(iv,3)

@@ -12,10 +12,17 @@ module particleIO
 contains
 
   !> write out important fields of the particle struct into file
-  function particleio_write(prt,fn,ibeg,iend) result(err)
+  function particleio_write(prt_mass, prt_charge, prt_rpz, prt_mu, prt_rho_par, prt_isAllocated,fn,ibeg,iend) result(err)
 
     character(len=*) :: fn
-    type(particle_data) :: prt
+!   type(particle_data) :: prt
+    double precision, allocatable, dimension(:)   :: prt_mass
+    double precision, allocatable, dimension(:)   :: prt_charge
+    double precision, allocatable, dimension(:,:) :: prt_rpz
+    double precision, allocatable, dimension(:)   :: prt_mu
+    double precision, allocatable, dimension(:)   :: prt_rho_par
+    logical                                       :: prt_isAllocated
+
     integer, intent(in), optional :: ibeg
     integer, intent(in), optional :: iend
 
@@ -28,13 +35,13 @@ contains
        i2 = iend
     else
        i1 = 1
-       i2 = size(prt%mass)
+       i2 = size(prt_mass)
     end if
     
     open(unit=chn,file=fn,action='write', iostat=err)
     
     do i = i1,i2
-       write(chn,'(5E16.8)') prt % rpz(i,:), prt % mu(i), prt % rho_par(i)
+       write(chn,'(5E16.8)') prt_rpz(i,:), prt_mu(i), prt_rho_par(i)
     end do
 
     close(chn)

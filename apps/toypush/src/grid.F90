@@ -38,6 +38,11 @@ contains
 
     if(.not. allocated(grid_efield)) then
        allocate(grid_efield(3,nnode))
+#ifdef _OPENMP
+       !$omp target enter data map(alloc: grid_efield)
+#elif _OPENACC
+       !$acc enter data create(grid_efield)
+#endif
     else
        err = 3
        return
@@ -45,6 +50,11 @@ contains
 
     if(.not. allocated(grid_mapping)) then
        allocate(grid_mapping(2,3,nnode))
+#ifdef _OPENMP
+       !$omp target enter data map(alloc: grid_mapping)
+#elif _OPENACC
+       !$acc enter data create(grid_mapping)
+#endif
     else
        err = 4
        return
@@ -59,6 +69,12 @@ contains
 
     if(.not. allocated(grid_tri)) then
        allocate(grid_tri(3,ntri))
+#ifdef _OPENMP
+       !$omp target enter data map(alloc: grid_tri)
+#elif _OPENACC
+       !$acc enter data create(grid_tri)
+#endif
+
     else
        err = 6
        return

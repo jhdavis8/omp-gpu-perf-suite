@@ -50,23 +50,28 @@ contains
 
     err = 0
 
+#ifdef _OPENMP
+    !$omp target teams distribute
+#elif _OPENACC
+    !$acc parallel loop
+#endif
     do iv = 1,veclen
 
        ! Norms
-       B2 = dot_product(bvec(iv,:),bvec(iv,:))
+       B2 = bvec(iv,1)**2 + bvec(iv,2)**2 + bvec(iv,3)**2
 #ifdef NOSQRT
        B  = B2
 #else
        B  = sqrt(B2)
 #endif
        
-#ifdef NODIV       
+#ifdef NODIV
        c_m = charge(iv) * mass(iv)
        cmrho = c_m * y(iv,4)
        cmrho2 = cmrho * y(iv,4)
        over_r = 1.0D0 * y(iv,1)
        over_B  = 1.0D0 * B
-       over_B2 = 1.0D0 * B2       
+       over_B2 = 1.0D0 * B2
 
        D = 1.0D0 * (1.0D0 + y(iv,4) * (&
             -1.D0 * over_B2 * ( jacb(iv,2,3) * bvec(iv,1) &
@@ -78,7 +83,7 @@ contains
        cmrho2 = cmrho * y(iv,4)
        over_r = 1.0D0 / y(iv,1)
        over_B  = 1.0D0 / B
-       over_B2 = 1.0D0 / B2       
+       over_B2 = 1.0D0 / B2
 
        D = 1.0D0 / (1.0D0 + y(iv,4) * (&
             -1.D0 * over_B2 * ( jacb(iv,2,3) * bvec(iv,1) &
@@ -113,14 +118,8 @@ contains
             + Fz * (bvec(iv,2) * over_r + jacb(iv,2,1) - jacb(iv,1,2) * over_r)  &
             + Fp * (jacb(iv,1,3) - jacb(iv,3,1))) )
 
-       !yp_exb(iv,1)= D*(bvec(iv,3) * evec(iv,2) - Bvec(iv,2) * evec(iv,3)) * over_b2
-       !yp_exb(iv,2)= D*(bvec(iv,2) * evec(iv,1) - bvec(iv,1) * evec(iv,2)) * over_b2
-       !yp_exb(iv,3)= D*(bvec(iv,1) * evec(iv,3) - bvec(iv,3) * evec(iv,1)) * over_b2 * over_r
-       
-       
     end do
-    
-    
+
   end function eom_eval
 
 
