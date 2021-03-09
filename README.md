@@ -5,11 +5,36 @@ This repository stores source codes for the benchmark apps used in "Performance 
 [Link to the paper on arXiv.](https://arxiv.org/abs/2010.09454)
 
 Apps included:
-* su3 (MILC)
+* SU(3) (MILC)
 * BabelStream
 * laplace **(Pending)**
 * GPP (BerkeleyGW) **(Pending)**
-* ToyPush (XGC) **(Pending)**
+* ToyPush (XGC)
+
+## Upstream sources:
+
+### SU(3)
+* Repo: `https://gitlab.com/NERSC/nersc-proxies/su3_bench`
+* Branch: `master`
+* Commit: `74ce86e5`
+
+### BabelStream
+* Repo: `https://github.com/UoB-HPC/BabelStream`
+* Branch: `main`
+* Commit: `9025afe`
+
+### laplace
+* N/A, see `Chandrasekaran, S., Juckeland, G.: OpenACC for Programmers: Concepts and Strategies. Addison-Wesley Professional (2017)`
+
+### GPP
+* Repo: `https://github.com/UoB-HPC/BabelStream`
+* Branch: `master`
+* Commit: `95c15073`
+
+### ToyPush
+* Repo: `https://gitlab.com/NERSC/toypush`
+* Branch: `oacc-omp`
+* Commit: `1870a860`
 
 ## Licensing/Availability
 
