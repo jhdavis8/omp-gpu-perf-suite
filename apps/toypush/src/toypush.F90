@@ -64,6 +64,9 @@ program toypush
 #ifdef NVTX
   use nvtx
 #endif
+#ifdef NVTX
+  use nvtx
+#endif
   
   implicit none  
   
