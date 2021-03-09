@@ -2,14 +2,69 @@
 !> @author T. Koskela
 !> @date Aug 17 2016
 !<
+
+! Fortran bindings for a small subset of the NVIDIA Tools Extensions library
+! Thanks to Jeff Larkin: https://gist.github.com/jefflarkin/b64f63d79bdc978a2503
+#ifdef NVTX
+module nvtx
+  use iso_c_binding
+  public :: nvtxrangepusha, nvtxrangepop
+  ! public :: nvtxrangepushaargb
+  interface
+     ! Annotate the timeline with a message
+     ! Parameters:
+     ! * string : the message in a string format
+     subroutine nvtxrangepusha(string) bind(C, name="nvtxRangePushA")
+       use iso_c_binding , only : c_char
+       character(kind=c_char) :: string(*)
+     end subroutine nvtxrangepusha
+
+     ! Annotate the timeline with both a message and an ARGB color
+     ! Parameters:
+     ! * string : the message in a string format
+     ! * argb   : the color in argb format (example: Z'FF880000'
+     ! subroutine nvtxrangepushaargb(string,argb) bind(C, name="_nvtxRangePushAARGB")
+     !   use iso_c_binding , only : c_char, c_int
+     !   character(kind=c_char) :: string(*)
+     !   integer(kind=c_int), value  :: argb
+     ! end subroutine nvtxrangepushaargb
+
+     ! Pop the last range off the stack
+     subroutine nvtxrangepop() bind(C, name="nvtxRangePop")
+     end subroutine nvtxrangepop
+
+     ! Place a mark on the timeline with a message
+     ! Parameters:
+     ! * string : the message in a string format
+     ! NOT YET EXPOSED
+     subroutine nvtxMarkA(string) bind(C, name="nvtxMarkA")
+       use iso_c_binding , only : c_char
+       character(kind=c_char) :: string(*)
+     end subroutine nvtxMarkA
+
+     ! Name an OS thread
+     ! NOT YET EXPOSED
+     subroutine nvtxNameOsThread(tid, string) bind(C, name="nvtxNameOsThread")
+       use iso_c_binding , only : c_int, c_char
+       integer(kind=c_int) :: tid
+       character(kind=c_char) :: string(*)
+     end subroutine nvtxNameOsThread
+  end interface
+end module nvtx
+#endif
+
 program toypush
 
   use params
   use rk4, only: rk4_push, y, dy, ytmp, dyt, dym, y2, jacb, efield, bfield
 ! use particle, only: particle_data
   use initmodule, only : init
-use grid_module, only : grid_efield, grid_mapping, grid_node, grid_tri
+  use grid_module, only : grid_efield, grid_mapping, grid_node, grid_tri
 
+#ifdef NVTX
+  use nvtx
+#endif
+  
   implicit none  
   
   integer :: err
@@ -51,6 +106,9 @@ use grid_module, only : grid_efield, grid_mapping, grid_node, grid_tri
   if(my_id .eq. 0) write(*,*) 'pushing particles in ',nblock,' blocks'
 
   call cpu_time(t1)
+#ifdef NVTX
+  call nvtxrangepusha("GPU Region")
+#endif
   
   !pid = 88
   !open(unit=15,file='orbit.dat',action='write')
@@ -74,6 +132,9 @@ use grid_module, only : grid_efield, grid_mapping, grid_node, grid_tri
   !$acc update host(prt_rpz, prt_rho_par, y2, y, bfield, efield, prt_charge, prt_mass, prt_mu, jacb, dy, dyt, dym, ytmp, grid_mapping, grid_efield, grid_tri)
 #endif
 
+#ifdef NVTX
+  call nvtxrangepop()
+#endif
   call cpu_time(t2)
 
   if(my_id .eq. 0) write(*,*) 'done pushing'
